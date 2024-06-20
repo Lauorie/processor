@@ -554,7 +554,11 @@ class KnowledgeDocumentPreprocessor:
             if chunk['type'] in ['SECTION-TEXT','TABLE', 'TITLE']:
                 chunk['base64'] = 'meaningless'
         
-
+    def rename_key(self,dictionary, old_key, new_key):
+        if old_key in dictionary:
+            dictionary[new_key] = dictionary.pop(old_key)
+        else:
+            print(f"Key '{old_key}' not found in the dictionary.")
                 
     # 计算字符串长度辅助判断是不是标题
     def calculate_text_len(self, text):
@@ -651,7 +655,7 @@ class KnowledgeDocumentPreprocessor:
                             merged_chunk['display'] = display_list[:]
                             merged_chunk['positions'] = positions_list[:]
                             merged_chunk['base64'] = base64_list[:]
-                            merged_chunk['texts'] = texts_list[:]
+                            merged_chunk['text_list'] = texts_list[:]
                             result_chunks.append(merged_chunk)
 
                         # Reset all lists and reinitialize from current chunk
@@ -669,7 +673,7 @@ class KnowledgeDocumentPreprocessor:
                         merged_chunk['display'] = display_list[:]
                         merged_chunk['positions'] = positions_list[:]
                         merged_chunk['base64'] = base64_list[:]
-                        merged_chunk['texts'] = texts_list[:]
+                        merged_chunk['text_list'] = texts_list[:]
                         result_chunks.append(merged_chunk)
                         buffer_text = ""
                         display_list = []
@@ -693,7 +697,7 @@ class KnowledgeDocumentPreprocessor:
             merged_chunk['display'] = display_list[:]
             merged_chunk['positions'] = positions_list[:]
             merged_chunk['base64'] = base64_list[:]
-            merged_chunk['texts'] = texts_list[:]
+            merged_chunk['text_list'] = texts_list[:]
             result_chunks.append(merged_chunk)
 
         for chunk in result_chunks:
@@ -951,8 +955,10 @@ class KnowledgeDocumentPreprocessor:
         for chunk_list in chunk_knowledge_list:
             for chunk in chunk_list:
                 if chunk['type']!='TITLE':
+                    self.rename_key(chunk, 'base64', 'base64_list')
                     final_knowledge_chunk_list.append(chunk)
                 # final_knowledge_chunk_list.append(chunk)
+                
         
         final_long_context_chunk_list = []    
         for chunk_list in chunk_long_context_list:
