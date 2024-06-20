@@ -10,7 +10,7 @@ from copy import deepcopy
 
 class KnowledgeDocumentPreprocessor:
     
-    def __init__(self,tokenizer_path,  file_path, file_name):
+    def __init__(self,tokenizer_path, file_path, file_name):
         self.data = None
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_path, trust_remote_code=True)
         self.file_path = file_path
@@ -47,7 +47,7 @@ class KnowledgeDocumentPreprocessor:
     
         return result_list
         
-    # 1 预处理，去除HEADER和FOOTER，调整'SECTION-TITLE'类型
+    # 1 预处理，去除HEADER和FOOTER，调整'SECTION-TITLE'类型，给所有非IMAGE类型的base64赋值“meaningless”,所有IMAGE类型的chunk添加一个占位符
     def preprocess(self):
         with open(self.file_path, 'r', encoding='utf-8') as file:
             self.data = json.load(file)
@@ -59,8 +59,14 @@ class KnowledgeDocumentPreprocessor:
         for chunk in self.data:
             if chunk['type'] == 'SECTION-TITLE':
                 chunk['type'] = 'SECTION-TEXT'
-            
-                
+            if chunk['type'] == 'IMAGE':
+                chunk['text'] = '![image](attachment:image)'
+            if chunk['type'] in ['SECTION-TEXT','TABLE', 'TITLE']:
+                chunk['base64'] = 'meaningless'
+        for chunk in self.data:
+            if chunk['type'] == 'IMAGE':
+                chunk['type'] = 'SECTION-TEXT'
+
                 
     # 计算字符串长度辅助判断是不是标题
     def calculate_text_len(self, text):
@@ -125,73 +131,68 @@ class KnowledgeDocumentPreprocessor:
         result_chunks = []
         buffer_text = ""
         first_chunk = None
-        display_list = []  # 使用列表来存储所有相关的 display 信息
-        positions_list = []  # 使用列表来存储所有相关的 position 信息
+        display_list = []
+        positions_list = []
+        base64_list = []
+        texts_list = []
 
         file_name_base = self.file_name
         extra_info = file_name_base + '的' + chunk_list[0]['text'] + '的部分内容为' + ':'
-        extra_table_info = file_name_base + '的' + chunk_list[0]['text'] + '的一个表格为' + ':'
 
         for i, chunk in enumerate(chunk_list):
             try:
                 if chunk['type'] == 'SECTION-TEXT':
-                    if not first_chunk:
-                        first_chunk = chunk.copy()
-                        display_list = [chunk.get('display', {})]
-                        positions_list = [chunk.get('positions', {})]
-                    else:
-                        display_list.append(chunk.get('display', {}))
-                        positions_list.append(chunk.get('positions', {}))
-
-                    buffer_text += "\n" + chunk['text']
-                    full_text = extra_info + buffer_text
+                    temp_text = buffer_text + "\n" + chunk['text'] if buffer_text else chunk['text']
+                    full_text = extra_info + temp_text
                     current_length = self.calculate_length(full_text)
 
                     if current_length < 500:
-                        continue
+                        if not first_chunk:
+                            first_chunk = chunk.copy()
+                        buffer_text = temp_text
+                        display_list.append(chunk.get('display', {}))
+                        positions_list.append(chunk.get('positions', {}))
+                        base64_list.append(chunk.get('base64', ''))
+                        texts_list.append(chunk['text'])
+                    else:
+                        if first_chunk:
+                            merged_chunk = first_chunk.copy()
+                            merged_chunk['text'] = extra_info + buffer_text
+                            merged_chunk['display'] = display_list[:]
+                            merged_chunk['positions'] = positions_list[:]
+                            merged_chunk['base64'] = base64_list[:]
+                            merged_chunk['texts'] = texts_list[:]
+                            result_chunks.append(merged_chunk)
 
-                    while current_length > 500:
-                        temp_text = ''
-                        for word in re.split(r'\s+', buffer_text):
-                            if self.calculate_length(extra_info + temp_text + ' ' + word) <= 500:
-                                temp_text += ' ' + word
-                            else:
-                                break
-                        merged_chunk = first_chunk.copy()
-                        merged_chunk['text'] = extra_info + temp_text.strip()
-                        merged_chunk['display'] = display_list[:]
-                        merged_chunk['positions'] = positions_list[:]
-                        result_chunks.append(merged_chunk)
-                        buffer_text = buffer_text[len(temp_text.strip()):].strip()
-                        full_text = extra_info + buffer_text
-                        current_length = self.calculate_length(full_text)
-                        display_list = []  # 重置display列表
-                        positions_list = []  # 重置positions列表
+                        # Reset all lists and reinitialize from current chunk
+                        first_chunk = chunk.copy()
+                        buffer_text = chunk['text']
+                        display_list = [chunk.get('display', {})]
+                        positions_list = [chunk.get('positions', {})]
+                        base64_list = [chunk.get('base64', '')]
+                        texts_list = [chunk['text']]
 
                 elif chunk['type'] == 'TABLE':
-                    # 处理TABLE类型，添加额外信息并清空当前合并缓存，直接添加TABLE chunk
                     if buffer_text:
                         merged_chunk = first_chunk.copy()
                         merged_chunk['text'] = extra_info + buffer_text
                         merged_chunk['display'] = display_list[:]
                         merged_chunk['positions'] = positions_list[:]
+                        merged_chunk['base64'] = base64_list[:]
+                        merged_chunk['texts'] = texts_list[:]
                         result_chunks.append(merged_chunk)
                         buffer_text = ""
-                        display_list = []  # 清空display列表
-                        positions_list = []  # 清空positions列表
+                        display_list = []
+                        positions_list = []
+                        base64_list = []
+                        texts_list = []
+                    extra_table_info = file_name_base + '的' + chunk['text'] + '的一个表格为' + ':'
                     chunk['text'] = extra_table_info + chunk['text']
                     result_chunks.append(chunk)
-                    first_chunk = None  # 重新初始化合并过程
+                    first_chunk = None
 
                 elif chunk['type'] == 'TITLE':
-                    # 对TITLE类型的处理，直接添加到结果列表中
                     result_chunks.append(chunk)
-
-                else:
-                    # 对IMAGE和CAPTION类型的处理
-                    if buffer_text and (chunk['type'] == 'IMAGE' or chunk['type'] == 'CAPTION'):
-                        display_list.append(chunk.get('display', {}))
-                        positions_list.append(chunk.get('positions', {}))
 
             except Exception as e:
                 print("Error processing chunk: ", e)
@@ -201,6 +202,8 @@ class KnowledgeDocumentPreprocessor:
             merged_chunk['text'] = extra_info + buffer_text
             merged_chunk['display'] = display_list[:]
             merged_chunk['positions'] = positions_list[:]
+            merged_chunk['base64'] = base64_list[:]
+            merged_chunk['texts'] = texts_list[:]
             result_chunks.append(merged_chunk)
 
         for chunk in result_chunks:
@@ -212,10 +215,6 @@ class KnowledgeDocumentPreprocessor:
                 del chunk['children']
 
         return result_chunks
-
-
-
-
     
     
     def process_long_context_chunks(self, chunk_list):
@@ -283,9 +282,10 @@ class KnowledgeDocumentPreprocessor:
     # 主函数        
     def process(self):
         
-        # 1. 预处理（去除header，footer）
+        # 1. 预处理（去除header，footer），修改section-title为section-text，
         self.preprocess()
-        # 2. 判断Title类型（aux强制把标题添加在第一个chunk，类型为title）
+        
+        # 2. 判断Title类型（aux强制把标题添加在第一个chunk，类型为title），统一在开头位置插入一个text为file_name的chunk
         aux_chunk = {}
         aux_chunk['display'] = copy.deepcopy(self.data[0]['display'])
         aux_chunk['positions'] = copy.deepcopy(self.data[0]['positions'])
@@ -294,12 +294,10 @@ class KnowledgeDocumentPreprocessor:
         aux_chunk['base64'] = None
         aux_chunk['type'] = 'TITLE'
         aux_chunk['stage'] = copy.deepcopy(self.data[0]['stage'])
-        # 统一在开头位置插入一个text为file_name的chunk
         self.data.insert(0, aux_chunk)
         for i, chunk in enumerate(self.data):                
             if self.is_title(chunk['text'],i) and (chunk['type']=='SECTION-TEXT'):
                 chunk['type'] = 'TITLE'
-        
         
         # 3. 根据Title类型标记索引
         index_list = []
@@ -307,7 +305,6 @@ class KnowledgeDocumentPreprocessor:
             if chunk['type']=='TITLE':
                 index_list.append(i)
             
-                
         # 4. 根据索引切分子list
         chunk_lists = []
         for i in range(len(index_list)):
@@ -317,34 +314,34 @@ class KnowledgeDocumentPreprocessor:
                 chunks = self.data[index_list[i]:]
             chunk_lists.append(chunks)
             
-            
         # 5. 给每个chunk添加附加信息
         for chunk_list in chunk_lists:
             for i, chunk in enumerate(chunk_list):
                 chunk['attach_text']=self.file_name + '的' + chunk_list[0]['text'] + '的部分内容为' + ':' + chunk['text']
                 page_no = copy.deepcopy(chunk['positions']['page_no'])
-                if(len(page_no)>1):
+                if(len(page_no)>1): # 处理docai的错误类型
                     chunk['positions']['page_no'] = [page_no[0]]
                 
-                
         # 6. 判断type为caption的chunk
-        for chunk_list in chunk_lists:
-            for i, chunk in enumerate(chunk_list):
-                if (chunk['type']=='CAPTION'):
-                    chunk['parent_pos'] = -1
-                if (chunk['type']=='IMAGE'):
-                    if i!=0 and i!=len(chunk_list)-1:
-                        if (chunk_list[i+1]['type']=='SECTION-TEXT' or chunk_list[i+1]['type']=='CAPTION')and self.check_text_caption_type(chunk_list[i+1]['text']):
-                            chunk_list[i+1]['type'] = 'CAPTION'
-                            chunk_list[i+1]['parent_pos'] = 1
-                            chunk_list[i+1]['state'] = 'USED'
-                        elif (chunk_list[i-1]['type']=='SECTION-TEXT' or chunk_list[i-1]['type']=='CAPTION')and  self.check_text_caption_type(chunk_list[i-1]['text']) and ('state' in chunk_list[i-1]):
-                            chunk_list[i-1]['type'] = 'CAPTION'
-                            chunk_list[i-1]['parent_pos'] = -1
-        chunk_a = chunk_lists
-        chunk_lists = []
-        for chunk_list in chunk_a:
-            chunk_lists.append(self.process_chunks_length(chunk_list))
+        # for chunk_list in chunk_lists:
+        #     for i, chunk in enumerate(chunk_list):
+        #         if (chunk['type']=='CAPTION'):
+        #             chunk['parent_pos'] = -1
+        #         if (chunk['type']=='IMAGE'):
+        #             if i!=0 and i!=len(chunk_list)-1:
+        #                 if (chunk_list[i+1]['type']=='SECTION-TEXT' or chunk_list[i+1]['type']=='CAPTION')and self.check_text_caption_type(chunk_list[i+1]['text']):
+        #                     chunk_list[i+1]['type'] = 'CAPTION'
+        #                     chunk_list[i+1]['parent_pos'] = 1
+        #                     chunk_list[i+1]['state'] = 'USED'
+        #                 elif (chunk_list[i-1]['type']=='SECTION-TEXT' or chunk_list[i-1]['type']=='CAPTION')and  self.check_text_caption_type(chunk_list[i-1]['text']) and ('state' in chunk_list[i-1]):
+        #                     chunk_list[i-1]['type'] = 'CAPTION'
+        #                     chunk_list[i-1]['parent_pos'] = -1
+        
+        # 6.处理长度超过512的文本
+        chunk_lists = [self.process_chunks_length(chunk_list) for chunk_list in chunk_lists]
+        # for chunk_list in chunk_lists:
+        #     for chunk in chunk_list:
+        #         chunk['texts'] = []
         
         
         
@@ -407,11 +404,7 @@ class KnowledgeDocumentPreprocessor:
                     if isinstance(pos, dict):
                         chunk['positions'][cm]['bbox'] = chunk['positions'][cm]['bbox'][0]
                         
-                
-                
-                    
-                        
-                
+
                     
                     
         for j, chunk_list in enumerate(chunk_long_context_list):
@@ -455,12 +448,12 @@ class KnowledgeDocumentPreprocessor:
 
 if __name__ =="__main__":
     tokenizer_path = '/root/web_demo/HybirdSearch/models/models--Qwen--Qwen1.5-14B-Chat'
-    file_path = '/root/web_demo/HybirdSearch/cmx_workapace/es_app_0613/unprocessed/2022 年半年度报告.pdf.json'
-    file_name = '2022 年半年度报告'   # 别带.pdf
+    file_path = '/root/web_demo/HybirdSearch/cmx_workapace/es_app_0613/unprocessed/Safety FA-Aute Think用户手册.pdf.json'
+    file_name = 'Safety FA-Aute Think用户手册'   # 别带.pdf
     dp = KnowledgeDocumentPreprocessor(tokenizer_path,  file_path, file_name)
     knowledge, long_content = dp.process()
     
-    with open('/root/web_demo/HybirdSearch/cmx_workapace/es_app_0613/问答_processed/2022 年半年度报告.json', 'w', encoding='utf-8') as f:
+    with open('/root/web_demo/HybirdSearch/cmx_workapace/es_app_0613/问答_processed/Safety FA-Aute Think用户手册.json', 'w', encoding='utf-8') as f:
         json.dump(knowledge, f, ensure_ascii=False, indent=4)
-    with open('/root/web_demo/HybirdSearch/cmx_workapace/es_app_0613/长文本_processed/2022 年半年度报告.json', 'w', encoding='utf-8') as f:
+    with open('/root/web_demo/HybirdSearch/cmx_workapace/es_app_0613/长文本_processed/Safety FA-Aute Think用户手册.json', 'w', encoding='utf-8') as f:
         json.dump(long_content, f, ensure_ascii=False, indent=4)
