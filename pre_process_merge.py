@@ -286,181 +286,224 @@ class KnowledgeDocumentPreprocessor:
     def process(self):
         
         # 1. 预处理
-        self.preprocess()
+        try:
+            self.preprocess()
+        except:
+            logger.info(f"preprocesser的第1步出错")
+        
         
         # 2.强制把标题添加在第一个chunk，类型为title
-        aux_chunk = {}
-        aux_chunk['display'] = copy.deepcopy(self.data[0]['display'])
-        aux_chunk['positions'] = copy.deepcopy(self.data[0]['positions'])
-        aux_chunk['page_no'] = copy.deepcopy(self.data[0]['page_no'])
-        aux_chunk['text'] = self.file_name
-        aux_chunk['base64'] = 'meaningless'
-        aux_chunk['type'] = 'TITLE'
-        # aux_chunk['stage'] = copy.deepcopy(self.data[0]['stage'])
-        self.data.insert(0, aux_chunk)
+        try:
+            aux_chunk = {}
+            aux_chunk['display'] = copy.deepcopy(self.data[0]['display'])
+            aux_chunk['positions'] = copy.deepcopy(self.data[0]['positions'])
+            aux_chunk['page_no'] = copy.deepcopy(self.data[0]['page_no'])
+            aux_chunk['text'] = self.file_name
+            aux_chunk['base64'] = 'meaningless'
+            aux_chunk['type'] = 'TITLE'
+            # aux_chunk['stage'] = copy.deepcopy(self.data[0]['stage'])
+            self.data.insert(0, aux_chunk)
+        except:
+            logger.info(f"preprocesser的第2步出错")
+        
         
         # 3.识别title类型
-        for i, chunk in enumerate(self.data):                
-            if self.is_title(chunk['text'],i) and (chunk['type']=='SECTION-TEXT'):
-                chunk['type'] = 'TITLE'
+        try:
+            for i, chunk in enumerate(self.data):                
+                if self.is_title(chunk['text'],i) and (chunk['type']=='SECTION-TEXT'):
+                    chunk['type'] = 'TITLE'
+        except:
+            logger.info(f"preprocesser的第3步出错")
                
         # 4.根据Title类型标记索引
-        index_list = []
-        for i, chunk in enumerate(self.data):
-            if chunk['type']=='TITLE':
-                index_list.append(i)
-         
+        try:
+            index_list = []
+            for i, chunk in enumerate(self.data):
+                if chunk['type']=='TITLE':
+                    index_list.append(i)
+        except:
+            logger.info(f"preprocesser的第4步出错")
+        
         # 5.根据索引切分子list
-        chunk_lists = []
-        for i in range(len(index_list)):
-            if (i+1)!=len(index_list):
-                chunks = self.data[index_list[i]:index_list[i+1]]
-            else:
-                chunks = self.data[index_list[i]:]
-            chunk_lists.append(chunks)
+        try:
+            chunk_lists = []
+            for i in range(len(index_list)):
+                if (i+1)!=len(index_list):
+                    chunks = self.data[index_list[i]:index_list[i+1]]
+                else:
+                    chunks = self.data[index_list[i]:]
+                chunk_lists.append(chunks)
+        except:
+            logger.info(f"preprocesser的第5步出错")
          
         # 6.根据识别到的title给每个chunk添加附加信息（用在Long_context部分）
-        for chunk_list in chunk_lists:
-            for i, chunk in enumerate(chunk_list):
-                chunk['attach_text']=self.file_name + '的' + chunk_list[0]['text'] + '的部分内容为' + ':' + chunk['text']
+        try:
+            for chunk_list in chunk_lists:
+                for i, chunk in enumerate(chunk_list):
+                    chunk['attach_text']=self.file_name + '的' + chunk_list[0]['text'] + '的部分内容为' + ':' + chunk['text']
+        except:
+            logger.info(f"preprocesser的第6步出错")
         
         # 7.识别Caption
-        for chunk_list in chunk_lists:
-            for i, chunk in enumerate(chunk_list):
-                if i > 0 and chunk_list[i-1]['type'] == 'IMAGE' and chunk['type'] == 'SECTION-TEXT' and (self.check_absolute_pos(chunk) or self.check_text_caption_type(chunk['text'])):
-                    chunk['type'] ='CAPTION'
-                if i < len(chunk_list) - 1 and chunk_list[i+1]['type'] == 'IMAGE' and chunk['type'] == 'SECTION-TEXT' and (self.check_absolute_pos(chunk) or self.check_text_caption_type(chunk['text'])):
-                    chunk['type'] = 'CAPTION'
+        try:
+            for chunk_list in chunk_lists:
+                for i, chunk in enumerate(chunk_list):
+                    if i > 0 and chunk_list[i-1]['type'] == 'IMAGE' and chunk['type'] == 'SECTION-TEXT' and (self.check_absolute_pos(chunk) or self.check_text_caption_type(chunk['text'])):
+                        chunk['type'] ='CAPTION'
+                    if i < len(chunk_list) - 1 and chunk_list[i+1]['type'] == 'IMAGE' and chunk['type'] == 'SECTION-TEXT' and (self.check_absolute_pos(chunk) or self.check_text_caption_type(chunk['text'])):
+                        chunk['type'] = 'CAPTION'
+        except:
+            logger.info(f"preprocesser的第7步出错")
         
         # 8.IMAGE类型的text赋值为caption（后续应该用不到CAPTION类型）
-        for chunk_list in chunk_lists:
-            for i, chunk in enumerate(chunk_list):
-                if chunk['type']=='IMAGE':
-                    text_1 = ''
-                    text_2 = ''
-                    if i>0 and chunk_list[i-1]['type']=="CAPTION":
-                        text_1 = chunk_list[i-1]['text']
-                    if i < len(chunk_list) - 1 and chunk_list[i+1]['type']=='CAPTION':
-                        text_2 = chunk_list[i+1]['text']
-                    chunk['text'] = text_1+text_2
+        try:
+            for chunk_list in chunk_lists:
+                for i, chunk in enumerate(chunk_list):
+                    if chunk['type']=='IMAGE':
+                        text_1 = ''
+                        text_2 = ''
+                        if i>0 and chunk_list[i-1]['type']=="CAPTION":
+                            text_1 = chunk_list[i-1]['text']
+                        if i < len(chunk_list) - 1 and chunk_list[i+1]['type']=='CAPTION':
+                            text_2 = chunk_list[i+1]['text']
+                        chunk['text'] = text_1+text_2
+        except:
+            logger.info(f"preprocesser的第8步出错")
         
         # 9.修改IMAGE类型，当前只有TITLE，SECTION-TEXT(IMAGE合并进去了)，TABLE，CAPTION
-        for chunk_list in chunk_lists:
-            for chunk in chunk_list:
-                if chunk['type'] == 'IMAGE':
-                    chunk['type'] = 'SECTION-TEXT'
+        try:
+            for chunk_list in chunk_lists:
+                for chunk in chunk_list:
+                    if chunk['type'] == 'IMAGE':
+                        chunk['type'] = 'SECTION-TEXT'
+        except:
+            logger.info(f"preprocesser的第9步出错")
         
         # 10.处理长度超过512的文本（只针对section-text类型）
-        chunk_lists = [self.process_chunks_length(chunk_list) for chunk_list in chunk_lists]
+        try:
+            chunk_lists = [self.process_chunks_length(chunk_list) for chunk_list in chunk_lists]
+        except:
+            logger.info(f"preprocesser的第10步出错")
         
         # 11. 合并chunk
-        chunk_knowledge_list = []
-        for chunk_list in chunk_lists:
-            chunk_knowledge_list.append(copy.deepcopy(self.process_knowledge_chunks(chunk_list)))
-        
-        chunk_long_context_list = []
-        for chunk_list in chunk_lists:
-            chunk_long_context_list.append(copy.deepcopy(self.process_long_context_chunks(chunk_list)))
+        try:
+            chunk_knowledge_list = []
+            for chunk_list in chunk_lists:
+                chunk_knowledge_list.append(copy.deepcopy(self.process_knowledge_chunks(chunk_list)))
+            
+            chunk_long_context_list = []
+            for chunk_list in chunk_lists:
+                chunk_long_context_list.append(copy.deepcopy(self.process_long_context_chunks(chunk_list)))
+        except:
+            logger.info(f"preprocesser的第11步出错")
         
         # 12. 给每个chunk添加id信息
-        num = 0
-        for chunk_list in chunk_knowledge_list:
-            for chunk in chunk_list:
-                if chunk['text'] is not None:
-                    hash_id = self.hash_md5(chunk['text'])
-                elif chunk['base64'] is not None:
-                    hash_id = self.hash_md5(chunk['base64'])
-                else:
-                    hash_id = self.hash_md5('')
-                id = str(num)+'-'+hash_id
-                chunk['id']=id
-                num+=1
+        try:
+            num = 0
+            for chunk_list in chunk_knowledge_list:
+                for chunk in chunk_list:
+                    if chunk['text'] is not None:
+                        hash_id = self.hash_md5(chunk['text'])
+                    elif chunk['base64'] is not None:
+                        hash_id = self.hash_md5(chunk['base64'])
+                    else:
+                        hash_id = self.hash_md5('')
+                    id = str(num)+'-'+hash_id
+                    chunk['id']=id
+                    num+=1
         
-        
-        num = 0
-        for chunk_list in chunk_long_context_list:
-            for chunk in chunk_list:
-                if chunk['text'] is not None:
-                    hash_id = self.hash_md5(chunk['text'])
-                elif chunk['base64'] is not None:
-                    hash_id = self.hash_md5(chunk['base64'])
-                else:
-                    hash_id = self.hash_md5('')
-                id = str(num)+'-'+hash_id
-                chunk['id']=id
-                num+=1
+            num = 0
+            for chunk_list in chunk_long_context_list:
+                for chunk in chunk_list:
+                    if chunk['text'] is not None:
+                        hash_id = self.hash_md5(chunk['text'])
+                    elif chunk['base64'] is not None:
+                        hash_id = self.hash_md5(chunk['base64'])
+                    else:
+                        hash_id = self.hash_md5('')
+                    id = str(num)+'-'+hash_id
+                    chunk['id']=id
+                    num+=1
+        except:
+            logger.info(f"preprocesser的第12步出错")
                 
                 
         # 13. 给底层chunk添加parent_id
-        for chunk_list in chunk_knowledge_list:
-            for i, chunk in enumerate(chunk_list):
-                # if len(chunk_list)>1:
-                parent_id = chunk_list[0]['id']
-                chunk['page_no'] = chunk['page_no']+1
-                if chunk['type'] == 'TITLE':
-                    chunk['parent_id'] = parent_id
-                if chunk['type'] in ('SECTION-TEXT','TABLE','IMAGE'):
-                    chunk['parent_id'] = parent_id
-                # if chunk['type']=='CAPTION':
-                #     chunk['parent_id'] = chunk_list[i+chunk['parent_pos']]['id']
-                #     del chunk['parent_pos']
-                
-                for cm, pos in enumerate(chunk['positions']):
-                    if isinstance(pos, dict):
-                        chunk['positions'][cm]['bbox'] = chunk['positions'][cm]['bbox'][0]
-                        
-        for j, chunk_list in enumerate(chunk_long_context_list):
-            for i, chunk in enumerate(chunk_list):
-                # if len(chunk_list)>1:
-                parent_id = chunk_list[0]['id']
-                chunk['page_no'] = chunk['page_no']+1
-                if chunk['type'] == 'TITLE':
-                    chunk['parent_id'] = parent_id
-                if chunk['type'] in ('SECTION-TEXT','TABLE','IMAGE'):
-                    chunk['parent_id'] = parent_id
-                # if chunk['type']=='CAPTION':
-                #     chunk['parent_id'] = chunk_list[i+chunk['parent_pos']]['id']
-                #     del chunk['parent_pos']
-                
-                for cm, pos in enumerate(chunk['positions']):
-                    if isinstance(pos, dict):
-                        chunk['positions'][cm]['bbox'] = chunk['positions'][cm]['bbox'][0]
-                # if j == 0 and i==0:
-                #     chunk['positions'] = chunk_list[1]['positions']
+        try:
+            for chunk_list in chunk_knowledge_list:
+                for i, chunk in enumerate(chunk_list):
+                    # if len(chunk_list)>1:
+                    parent_id = chunk_list[0]['id']
+                    chunk['page_no'] = chunk['page_no']+1
+                    if chunk['type'] == 'TITLE':
+                        chunk['parent_id'] = parent_id
+                    if chunk['type'] in ('SECTION-TEXT','TABLE','IMAGE'):
+                        chunk['parent_id'] = parent_id
+                    # if chunk['type']=='CAPTION':
+                    #     chunk['parent_id'] = chunk_list[i+chunk['parent_pos']]['id']
+                    #     del chunk['parent_pos']
+                    
+                    for cm, pos in enumerate(chunk['positions']):
+                        if isinstance(pos, dict):
+                            chunk['positions'][cm]['bbox'] = chunk['positions'][cm]['bbox'][0]
+                            
+            for j, chunk_list in enumerate(chunk_long_context_list):
+                for i, chunk in enumerate(chunk_list):
+                    # if len(chunk_list)>1:
+                    parent_id = chunk_list[0]['id']
+                    chunk['page_no'] = chunk['page_no']+1
+                    if chunk['type'] == 'TITLE':
+                        chunk['parent_id'] = parent_id
+                    if chunk['type'] in ('SECTION-TEXT','TABLE','IMAGE'):
+                        chunk['parent_id'] = parent_id
+                    # if chunk['type']=='CAPTION':
+                    #     chunk['parent_id'] = chunk_list[i+chunk['parent_pos']]['id']
+                    #     del chunk['parent_pos']
+                    
+                    for cm, pos in enumerate(chunk['positions']):
+                        if isinstance(pos, dict):
+                            chunk['positions'][cm]['bbox'] = chunk['positions'][cm]['bbox'][0]
+                    # if j == 0 and i==0:
+                    #     chunk['positions'] = chunk_list[1]['positions']
+        except:
+            logger.info(f"preprocesser的第13步出错")
                     
                     
         # 14. 返回列表类型
-        final_knowledge_chunk_list = []    
-        for chunk_list in chunk_knowledge_list:
-            for chunk in chunk_list:
-                if chunk['type']!='TITLE':
-                    self.rename_key(chunk, 'base64', 'base64_list')
-                    if chunk['type'] == 'TABLE':
-                        chunk['base64_list'] = [chunk['base64_list']]
-                        chunk['text_list'] = [chunk['text']]
-                    final_knowledge_chunk_list.append(chunk)
-        
-        final_long_context_chunk_list = []    
-        for chunk_list in chunk_long_context_list:
-            for chunk in chunk_list:
-                # if chunk['type']=='SECTION-TEXT' and chunk['base64'] != 'meaningless':
-                #     chunk['type'] = 'IMAGE'
-                if chunk['type']!='CAPTION':
-                    self.rename_key(chunk, 'base64', 'base64_list')
-                    chunk['text_list'] = chunk['text']
-                    chunk['base64_list'] = chunk['base64_list']
-                    final_long_context_chunk_list.append(chunk)
+        try:
+            final_knowledge_chunk_list = []    
+            for chunk_list in chunk_knowledge_list:
+                for chunk in chunk_list:
+                    if chunk['type']!='TITLE':
+                        self.rename_key(chunk, 'base64', 'base64_list')
+                        if chunk['type'] == 'TABLE':
+                            chunk['base64_list'] = [chunk['base64_list']]
+                            chunk['text_list'] = [chunk['text']]
+                        final_knowledge_chunk_list.append(chunk)
+            
+            final_long_context_chunk_list = []    
+            for chunk_list in chunk_long_context_list:
+                for chunk in chunk_list:
+                    # if chunk['type']=='SECTION-TEXT' and chunk['base64'] != 'meaningless':
+                    #     chunk['type'] = 'IMAGE'
+                    if chunk['type']!='CAPTION':
+                        self.rename_key(chunk, 'base64', 'base64_list')
+                        chunk['text_list'] = chunk['text']
+                        chunk['base64_list'] = chunk['base64_list']
+                        final_long_context_chunk_list.append(chunk)
+        except:
+            logger.info(f"preprocesser的第14步出错")
 
         return (final_knowledge_chunk_list, final_long_context_chunk_list)
 
 if __name__ =="__main__":
     tokenizer_path = '/root/web_demo/HybirdSearch/models/models--Qwen--Qwen1.5-14B-Chat'
-    file_path = '/root/web_demo/HybirdSearch/cmx_workapace/es_app_0625_index_type/unprocessed/0bd758fc16f4266de9e5f39e72905129.json'
-    file_name = '0bd758fc16f4266de9e5f39e72905129'   # 别带.pdf
+    file_path = '/root/web_demo/HybirdSearch/cmx_workapace/es_app_0625_index_type/unprocessed/8d211d2b978230688027ddd482e28885.json'
+    file_name = '8d211d2b978230688027ddd482e28885'   # 别带.pdf
     dp = KnowledgeDocumentPreprocessor(tokenizer_path,  file_path, file_name)
     knowledge, long_content = dp.process()
     
-    with open('/root/web_demo/HybirdSearch/cmx_workapace/es_app_0625_index_type/问答_processed/0bd758fc16f4266de9e5f39e72905129.json', 'w', encoding='utf-8') as f:
+    with open('/root/web_demo/HybirdSearch/cmx_workapace/es_app_0625_index_type/问答_processed/8d211d2b978230688027ddd482e28885.json', 'w', encoding='utf-8') as f:
         json.dump(knowledge, f, ensure_ascii=False, indent=4)
-    with open('/root/web_demo/HybirdSearch/cmx_workapace/es_app_0625_index_type/长文本_processed/0bd758fc16f4266de9e5f39e72905129.json', 'w', encoding='utf-8') as f:
+    with open('/root/web_demo/HybirdSearch/cmx_workapace/es_app_0625_index_type/长文本_processed/8d211d2b978230688027ddd482e28885.json', 'w', encoding='utf-8') as f:
         json.dump(long_content, f, ensure_ascii=False, indent=4)
