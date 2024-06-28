@@ -46,7 +46,7 @@ class KnowledgeDocumentPreprocessor:
                 
             page_no = copy.deepcopy(chunk['positions']['page_no'])
             if(len(page_no)>1): # 处理docai的错误类型
-                    chunk['positions']['page_no'] = [page_no[0]]    
+                chunk['positions']['page_no'] = [page_no[0]]    
     
     
     # 2.识别title
