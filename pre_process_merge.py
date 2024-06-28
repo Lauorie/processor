@@ -33,7 +33,7 @@ class KnowledgeDocumentPreprocessor:
             logger.info(f"-------docai解析失败")
         self.temp_data = [chunk for chunk in self.data['tree'] if chunk['type']!='HEADER']
         self.data = [chunk for chunk in self.temp_data if chunk['type']!='FOOTER']
-        self.data = [chunk for chunk in self.data if not (chunk["display"]["top"] < (chunk["display"]["page_height"] / 20))]
+        # self.data = [chunk for chunk in self.data if not (chunk["display"]["top"] < (chunk["display"]["page_height"] / 20))]
         
         for chunk in self.data:
             if chunk['type'] == 'SECTION-TITLE':
@@ -172,55 +172,25 @@ class KnowledgeDocumentPreprocessor:
     
     def process_long_context_chunks(self, chunk_list):
         result_chunks = []
-        buffer_text = ""
-        first_chunk = None
-        current_page_no = None
-        display_list = [] 
-        positions_list = []  
+        # first_chunk = None
+        # current_page_no = None
+        # display_list = [] 
 
         for chunk in chunk_list:
-            try:
-                # if chunk['type'] == 'CAPTION':
-                #     chunk['type'] = 'SECTION_TEXT'
-                if chunk['type'] == 'SECTION-TEXT':
-                    if self.calculate_length(chunk['text']) < 500:
-                        chunk['text'] = chunk['text']+'\n'
-                        result_chunks.append(chunk)
-                    else:
-                        buffer_text = chunk['text']
-                        extra_info = ''
-                        current_length = self.calculate_length(buffer_text)
-                        while current_length > 500:
-                            temp_text = ''
-                            for word in re.split(r'\s+', buffer_text):
-                                if self.calculate_length(extra_info + temp_text + ' ' + word) <= 500:
-                                    temp_text += ' ' + word
-                                else:
-                                    break
-                            merged_chunk = copy.deepcopy(chunk)
-                            merged_chunk['text'] = extra_info + temp_text.strip()
-                            result_chunks.append(merged_chunk)
-                            buffer_text = buffer_text[len(temp_text.strip()):].strip()
-                            current_length = self.calculate_length(extra_info + buffer_text)
-                        if buffer_text:
-                            # 处理剩余部分
-                            merged_chunk = copy.deepcopy(chunk)
-                            merged_chunk['text'] = extra_info + buffer_text
-                            result_chunks.append(merged_chunk)
-                else:
-                    # 非“SECTION-TEXT”类型，直接添加
-                    result_chunks.append(chunk)
+            if chunk['type'] == 'SECTION-TEXT':
+                chunk['text'] = chunk['text']+'\n'
+                result_chunks.append(chunk)
+            else:
+                # 非“SECTION-TEXT”类型，直接添加
+                result_chunks.append(chunk)
 
-            except Exception as e:
-                print("Error processing chunk: ", e)
-            
-            for chunk in result_chunks:
-                if isinstance(chunk['display'], dict):
-                    chunk['display'] = [chunk['display']]
-                if isinstance(chunk['positions'], dict):
-                    chunk['positions'] = [chunk['positions']]
-                if 'children' in chunk:
-                    del chunk['children']
+        for chunk in result_chunks:
+            if isinstance(chunk['display'], dict):
+                chunk['display'] = [chunk['display']]
+            if isinstance(chunk['positions'], dict):
+                chunk['positions'] = [chunk['positions']]
+            if 'children' in chunk:
+                del chunk['children']
 
         return result_chunks
     
@@ -333,13 +303,13 @@ class KnowledgeDocumentPreprocessor:
         for i, chunk in enumerate(self.data):                
             if self.is_title(chunk['text'],i) and (chunk['type']=='SECTION-TEXT'):
                 chunk['type'] = 'TITLE'
-                
+               
         # 4.根据Title类型标记索引
         index_list = []
         for i, chunk in enumerate(self.data):
             if chunk['type']=='TITLE':
                 index_list.append(i)
-            
+         
         # 5.根据索引切分子list
         chunk_lists = []
         for i in range(len(index_list)):
@@ -348,7 +318,7 @@ class KnowledgeDocumentPreprocessor:
             else:
                 chunks = self.data[index_list[i]:]
             chunk_lists.append(chunks)
-        
+         
         # 6.根据识别到的title给每个chunk添加附加信息（用在Long_context部分）
         for chunk_list in chunk_lists:
             for i, chunk in enumerate(chunk_list):
@@ -357,11 +327,9 @@ class KnowledgeDocumentPreprocessor:
         # 7.识别Caption
         for chunk_list in chunk_lists:
             for i, chunk in enumerate(chunk_list):
-                # if i > 0 and chunk_list[i-1]['type'] == 'IMAGE' and chunk['type'] == 'SECTION-TEXT' and (self.check_absolute_pos(chunk) or self.check_text_caption_type(chunk['text'])):
-                if i > 0 and chunk_list[i-1]['type'] == 'IMAGE' and chunk['type'] == 'SECTION-TEXT':
+                if i > 0 and chunk_list[i-1]['type'] == 'IMAGE' and chunk['type'] == 'SECTION-TEXT' and (self.check_absolute_pos(chunk) or self.check_text_caption_type(chunk['text'])):
                     chunk['type'] ='CAPTION'
-                # if i < len(chunk_list) - 1 and chunk_list[i+1]['type'] == 'IMAGE' and chunk['type'] == 'SECTION-TEXT' and (self.check_absolute_pos(chunk) or self.check_text_caption_type(chunk['text'])):
-                if i < len(chunk_list) - 1 and chunk_list[i+1]['type'] == 'IMAGE' and chunk['type'] == 'SECTION-TEXT':
+                if i < len(chunk_list) - 1 and chunk_list[i+1]['type'] == 'IMAGE' and chunk['type'] == 'SECTION-TEXT' and (self.check_absolute_pos(chunk) or self.check_text_caption_type(chunk['text'])):
                     chunk['type'] = 'CAPTION'
         
         # 8.IMAGE类型的text赋值为caption（后续应该用不到CAPTION类型）
@@ -393,7 +361,7 @@ class KnowledgeDocumentPreprocessor:
         chunk_long_context_list = []
         for chunk_list in chunk_lists:
             chunk_long_context_list.append(copy.deepcopy(self.process_long_context_chunks(chunk_list)))
-            
+        
         # 12. 给每个chunk添加id信息
         num = 0
         for chunk_list in chunk_knowledge_list:
@@ -487,12 +455,12 @@ class KnowledgeDocumentPreprocessor:
 
 if __name__ =="__main__":
     tokenizer_path = '/root/web_demo/HybirdSearch/models/models--Qwen--Qwen1.5-14B-Chat'
-    file_path = '/root/web_demo/HybirdSearch/cmx_workapace/es_app_0625_index_type/unprocessed/字节跳动深度研究报告.pdf.json'
-    file_name = '字节跳动深度研究报告'   # 别带.pdf
+    file_path = '/root/web_demo/HybirdSearch/cmx_workapace/es_app_0625_index_type/unprocessed/0bd758fc16f4266de9e5f39e72905129.json'
+    file_name = '0bd758fc16f4266de9e5f39e72905129'   # 别带.pdf
     dp = KnowledgeDocumentPreprocessor(tokenizer_path,  file_path, file_name)
     knowledge, long_content = dp.process()
     
-    with open('/root/web_demo/HybirdSearch/cmx_workapace/es_app_0625_index_type/问答_processed/字节跳动深度研究报告.json', 'w', encoding='utf-8') as f:
+    with open('/root/web_demo/HybirdSearch/cmx_workapace/es_app_0625_index_type/问答_processed/0bd758fc16f4266de9e5f39e72905129.json', 'w', encoding='utf-8') as f:
         json.dump(knowledge, f, ensure_ascii=False, indent=4)
-    with open('/root/web_demo/HybirdSearch/cmx_workapace/es_app_0625_index_type/长文本_processed/字节跳动深度研究报告.json', 'w', encoding='utf-8') as f:
+    with open('/root/web_demo/HybirdSearch/cmx_workapace/es_app_0625_index_type/长文本_processed/0bd758fc16f4266de9e5f39e72905129.json', 'w', encoding='utf-8') as f:
         json.dump(long_content, f, ensure_ascii=False, indent=4)
